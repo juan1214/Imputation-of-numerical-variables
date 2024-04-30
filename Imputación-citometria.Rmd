@@ -1,0 +1,330 @@
+---
+title: "Imputación citometría"
+author: "Juan Manuel Sánchez Restrepo"
+date: "2024-04-01"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, echo = FALSE, results='hide'}
+#librerias
+library(readxl)
+library(mice)
+library(tinytex)
+library(xtable)
+```
+
+```{r}
+#cargar la base datos
+data1 <- invisible(read_xlsx("C:/Users/UNALMED/Desktop/One Health/Tesis doctora Olga/Bases de datos/5. Resultados Citometría CyC_22032024.xlsx", sheet = 3))
+names(data1)
+```
+
+```{r}
+# Renombrar las variables para eliminar los guiones y los puntos suspensivos
+names(data1) <- gsub("-", "_", names(data1))
+names(data1) <- gsub("\\.\\.\\.", "_", names(data1))
+names(data1) <- gsub(" ", "_", names(data1))
+names(data1) <- gsub("\\(", "", names(data1))
+names(data1) <- gsub("\\)", "", names(data1))
+names(data1) <- gsub("/", "_", names(data1))
+names(data1) <- gsub("\\+", "", names(data1))
+names(data1)
+```
+
+```{r, results='hide'}
+#Crear un diccionario de variables que excluya la variable "ID_SAMPLE"
+variables_num <- setdiff(names(data1), "ID_SAMPLE")
+
+# Convertir las variables a numericas
+data1[variables_num] <- lapply(data1[variables_num], as.numeric)
+```
+
+
+```{r}
+#Crear una nueva base de datos con la variable "ID_SAMPLE" y las variables de citometria a imputar
+data2 <- data1[,c("ID_SAMPLE", "Bead_Region_Count_2", "Number_of_Relative_Events_LT_3",
+                  "Number_of_Relative_Events_T_Helper_cells_CD4_cells_5", 
+                  "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_7", 
+                  "Bead_Region_Count_9",  "Number_of_Relative_Events_LT_10", 
+                  "Number_of_Relative_Events_T_Helper_cells_CD4_cells_12", 
+                  "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_14", 
+                  "Bead_Region_Count_16", "Number_of_Relative_Events_LT_17", 
+                  "Number_of_Relative_Events_T_Helper_cells_CD4_cells_19",  
+                  "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_21", 
+                  "Bead_Region_Count_23", "Number_of_Relative_Events_LT_24", 
+                  "Number_of_Relative_Events_T_Helper_cells_CD4_cells_26", 
+                  "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_28")]
+```
+
+```{r, echo = F}
+var_cit <- c("Bead_Region_Count_2", "Number_of_Relative_Events_LT_3", "Number_of_Relative_Events_T_Helper_cells_CD4_cells_5", "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_7", "Bead_Region_Count_9",  "Number_of_Relative_Events_LT_10", "Number_of_Relative_Events_T_Helper_cells_CD4_cells_12", "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_14", "Bead_Region_Count_16", "Number_of_Relative_Events_LT_17", "Number_of_Relative_Events_T_Helper_cells_CD4_cells_19",  "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_21", "Bead_Region_Count_23", "Number_of_Relative_Events_LT_24", "Number_of_Relative_Events_T_Helper_cells_CD4_cells_26", "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_28")
+```
+
+
+
+```{r}
+#Verificar que las variables se hayan convertido a numericas
+str(data2)
+```
+
+\section{libreria mice para imputación de datos faltantes}
+
+El paquete mice en R es una biblioteca para la imputación de datos faltantes. MICE (Multivariate Imputation by Chained Equations), “Imputación de Cadena por Ecuaciones Multivariadas". 
+
+1.	La función realiza una imputación simple para cada variable con datos faltantes. Esto significa que reemplaza cada valor faltante con un valor estimado. La estimación se realiza utilizando un modelo predictivo basado en las otras variables.
+
+2.	Luego, realiza un proceso iterativo de imputación. En cada iteración, la función selecciona una variable con datos imputados y la "vacía", es decir, vuelve a poner los valores faltantes en su lugar.
+
+3.	Luego re-imputa los valores faltantes para esa variable, utilizando un modelo predictivo basado en todas las otras variables (que ahora incluyen algunas imputaciones).
+
+4.	Este proceso se repite para cada variable con datos faltantes, y luego se repite para un número de iteraciones especificado. Cada iteración "refina" las imputaciones, haciéndolas más consistentes con los patrones observados en los datos.
+
+5.	Al final del proceso, tienes un conjunto de datos completo, donde los valores faltantes han sido reemplazados por imputaciones.
+
+El método "Predictive Mean Matching" (PMM) es uno de los métodos de imputación que se pueden utilizar con el paquete mice en R.
+
+Su funcionadmiento implica que para cada valor faltante en una variable, PMM ajusta un modelo de regresión utilizando las otras variables como predictores. Este modelo se utiliza para predecir un valor para el dato faltante.
+
+Luego, en lugar de simplemente usar este valor predicho, PMM busca en los datos observados para encontrar un valor que sea similar al valor predicho.
+
+El valor observado que se encuentra es el que se utiliza para imputar el dato faltante. Esto significa que todas las imputaciones son valores que realmente se observaron en los datos, lo que puede ayudar a preservar la distribución de los datos.
+
+Este proceso se repite para cada valor faltante en los datos.
+
+La ventaja de PMM es que, al utilizar valores observados para las imputaciones, puede preservar características importantes de los datos, como la distribución y las relaciones entre variables. Sin embargo, como todos los métodos de imputación, no es perfecto y puede introducir sesgo si los datos faltantes no son aleatorios.
+
+```{r, echo = F}
+#Imputar las variables de Citometría de la muestra 1 con la libreria mice 
+imputed_data_sample1 <- mice(data2[2:5], m=5, maxit=50, method='pmm', seed=500)
+```
+
+```{r}
+#Imputar las variables de Citometría de la muestra 2 con la libreria mice
+imputed_data_sample2 <- mice(data2[6:9], m=5, maxit=50, method='pmm', seed=500)
+```
+
+```{r}
+#Imputar las variables de Citometría de la muestra 3 con la libreria mice
+imputed_data_sample3 <- mice(data2[10:13], m=5, maxit=50, method='pmm', seed=500)
+```
+
+```{r}
+#Imputar las variables de Citometría de la muestra 3 con la libreria mice
+imputed_data_sample4 <- mice(data2[14:17], m=5, maxit=50, method='pmm', seed=500)
+```
+
+```{r}
+# Completar cada conjunto de datos imputado
+completed_data_sample1 <- complete(imputed_data_sample1, 1)
+completed_data_sample2 <- complete(imputed_data_sample2, 1)
+completed_data_sample3 <- complete(imputed_data_sample3, 1)
+completed_data_sample4 <- complete(imputed_data_sample4, 1)
+```
+
+```{r}
+
+ID_SAMPLE = data2['ID_SAMPLE']
+# Combinar los conjuntos de datos completos
+BD_complete <- cbind(ID_SAMPLE, completed_data_sample1, completed_data_sample2,
+                     completed_data_sample3, completed_data_sample4)
+```
+
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rlll}
+  \hline
+ & Var1 & Var2 & Freq \\ 
+  \hline
+1 &  & Bead\_Region\_Count\_2 & Min.   :   438   \\ 
+  2 &  & Bead\_Region\_Count\_2 & 1st Qu.: 24766   \\ 
+  3 &  & Bead\_Region\_Count\_2 & Median : 28509   \\ 
+  4 &  & Bead\_Region\_Count\_2 & Mean   : 27503   \\ 
+  5 &  & Bead\_Region\_Count\_2 & 3rd Qu.: 30347   \\ 
+  6 &  & Bead\_Region\_Count\_2 & Max.   :177933   \\ 
+  7 &  & Bead\_Region\_Count\_2 & NA's   :16   \\ 
+  8 &  & Number\_of\_Relative\_Events\_LT\_3 & Min.   :    3   \\ 
+  9 &  & Number\_of\_Relative\_Events\_LT\_3 & 1st Qu.:   43   \\ 
+  10 &  & Number\_of\_Relative\_Events\_LT\_3 & Median :  495   \\ 
+  11 &  & Number\_of\_Relative\_Events\_LT\_3 & Mean   : 8312   \\ 
+  12 &  & Number\_of\_Relative\_Events\_LT\_3 & 3rd Qu.: 7226   \\ 
+  13 &  & Number\_of\_Relative\_Events\_LT\_3 & Max.   :53179   \\ 
+  14 &  & Number\_of\_Relative\_Events\_LT\_3 & NA's   :16   \\ 
+  15 &  & Number\_of\_Relative\_Events\_T\_Helper\_cells\_CD4\_cells\_5 & Min.   :    0   \\ 
+  16 &  & Number\_of\_Relative\_Events\_T\_Helper\_cells\_CD4\_cells\_5 & 1st Qu.:    7   \\ 
+  17 &  & Number\_of\_Relative\_Events\_T\_Helper\_cells\_CD4\_cells\_5 & Median :   46   \\ 
+  18 &  & Number\_of\_Relative\_Events\_T\_Helper\_cells\_CD4\_cells\_5 & Mean   : 2071   \\ 
+  19 &  & Number\_of\_Relative\_Events\_T\_Helper\_cells\_CD4\_cells\_5 & 3rd Qu.: 1505   \\ 
+  20 &  & Number\_of\_Relative\_Events\_T\_Helper\_cells\_CD4\_cells\_5 & Max.   :17100   \\ 
+  21 &  & Number\_of\_Relative\_Events\_T\_Helper\_cells\_CD4\_cells\_5 & NA's   :16   \\ 
+  22 &  & Number\_of\_Relative\_Events\_T\_Cytotoxic\_Cells\_CD8\_cells\_7 & Min.   :    0   \\ 
+  23 &  & Number\_of\_Relative\_Events\_T\_Cytotoxic\_Cells\_CD8\_cells\_7 & 1st Qu.:    3   \\ 
+  24 &  & Number\_of\_Relative\_Events\_T\_Cytotoxic\_Cells\_CD8\_cells\_7 & Median :   60   \\ 
+  25 &  & Number\_of\_Relative\_Events\_T\_Cytotoxic\_Cells\_CD8\_cells\_7 & Mean   : 2010   \\ 
+  26 &  & Number\_of\_Relative\_Events\_T\_Cytotoxic\_Cells\_CD8\_cells\_7 & 3rd Qu.: 1101   \\ 
+  27 &  & Number\_of\_Relative\_Events\_T\_Cytotoxic\_Cells\_CD8\_cells\_7 & Max.   :20188   \\ 
+  28 &  & Number\_of\_Relative\_Events\_T\_Cytotoxic\_Cells\_CD8\_cells\_7 & NA's   :17   \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+
+```{r}
+#visualizar estadisticos descriptivos de las variables de citometria de la muestra 1 sin imputar 
+summary1 <- summary(data2[2:5])
+
+summary_df <- as.data.frame(summary1)
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables de citometria de la muestra 1 imputadas 
+summary(BD_complete[2:5])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables de citometria de la muestra 2 sin imputar 
+summary(data2[6:9])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables de citometria de la muestra 2 imputada 
+summary(BD_complete[6:9])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variablesde citometria  de la muestra 3 sin imputar 
+summary(data2[10:13])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables de citometria  de la muestra 3 imputada 
+summary(BD_complete[10:13])
+```
+```{r}
+par(mfrow=c(2,3))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in var_cit) {
+    # Calcular las densidades
+    dens_orig <- density(data2[[var]], na.rm=TRUE)
+    dens_imputed <- density(BD_complete[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
+
+```{r}
+#Análisis de sensibilidad para las interleuquinas de la muestra 1
+# Aplicar un modelo lineal a los datos originales
+# Nota: Esto excluirá automáticamente las filas con valores faltantes
+original_model_sample1 <- lm(Bead_Region_Count_2 ~ Number_of_Relative_Events_LT_3 + Number_of_Relative_Events_T_Helper_cells_CD4_cells_5 + Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_7, data=data2)
+
+# Imprimir los resultados del modelo original
+#print(summary(original_model_sample1))
+anova(original_model_sample1)
+
+# Aplicar un modelo lineal a los datos imputados
+imputed_model_sample1 <- lm(Bead_Region_Count_2 ~ Number_of_Relative_Events_LT_3 + Number_of_Relative_Events_T_Helper_cells_CD4_cells_5 + Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_7, data=BD_complete)
+
+# Imprimir los resultados del modelo imputado
+#print(summary(imputed_model_sample1))
+anova(imputed_model_sample1)
+```
+
+```{r}
+# Realiza tu análisis en cada conjunto de datos imputado
+analyses_sample1 <- with(imputed_data_sample1, imputed_model_sample1)
+
+# Combina los resultados de los análisis
+combined_results_sample1 <- pool(analyses_sample1)
+
+combined_results_sample1
+```
+
+```{r}
+
+#Análisis de sensibilidad para las interleuquinas de la muestra 2
+# Aplicar un modelo lineal a los datos originales
+# Nota: Esto excluirá automáticamente las filas con valores faltantes
+original_model_sample2 <- lm(Bead_Region_Count_9 ~ Number_of_Relative_Events_LT_10 + Number_of_Relative_Events_T_Helper_cells_CD4_cells_12 + Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_14, data=data2)
+
+# Imprimir los resultados del modelo original
+print(summary(original_model_sample2))
+
+# Aplicar un modelo lineal a los datos imputados
+imputed_model_sample2 <- lm(Bead_Region_Count_9 ~ Number_of_Relative_Events_LT_10 + Number_of_Relative_Events_T_Helper_cells_CD4_cells_12 + Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_14, data=BD_complete)
+
+# Imprimir los resultados del modelo imputado
+print(summary(imputed_model_sample2))
+```
+
+```{r}
+# Realiza tu análisis en cada conjunto de datos imputado
+analyses_sample2 <- with(imputed_data_sample2, imputed_model_sample2)
+
+# Combina los resultados de los análisis
+combined_results_sample2<- pool(analyses_sample2)
+
+combined_results_sample2
+```
+```{r}
+
+#Análisis de sensibilidad para las interleuquinas de la muestra 3
+# Aplicar un modelo lineal a los datos originales
+# Nota: Esto excluirá automáticamente las filas con valores faltantes
+original_model_sample3 <- lm(Bead_Region_Count_16 ~ Number_of_Relative_Events_LT_17 + Number_of_Relative_Events_T_Helper_cells_CD4_cells_19 + Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_21, data=data2)
+
+# Imprimir los resultados del modelo original
+print(summary(original_model_sample3))
+
+# Aplicar un modelo lineal a los datos imputados
+imputed_model_sample3 <- lm(Bead_Region_Count_16 ~ Number_of_Relative_Events_LT_17 + Number_of_Relative_Events_T_Helper_cells_CD4_cells_19 + Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_21, data=BD_complete)
+
+# Imprimir los resultados del modelo imputado
+print(summary(imputed_model_sample3))
+```
+
+```{r}
+# Realiza tu análisis en cada conjunto de datos imputado
+analyses_sample3 <- with(imputed_data_sample3, imputed_model_sample3)
+
+# Combina los resultados de los análisis
+combined_results_sample3<- pool(analyses_sample3)
+
+combined_results_sample3
+```
+
+```{r}
+
+#Análisis de sensibilidad para las interleuquinas de la muestra 3
+# Aplicar un modelo lineal a los datos originales
+# Nota: Esto excluirá automáticamente las filas con valores faltantes
+original_model_sample4 <- lm( Bead_Region_Count_23 ~ Number_of_Relative_Events_LT_24 + Number_of_Relative_Events_T_Helper_cells_CD4_cells_26 + Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_28, data=data2)
+
+# Imprimir los resultados del modelo original
+print(summary(original_model_sample4))
+
+# Aplicar un modelo lineal a los datos imputados
+imputed_model_sample4 <- lm(Bead_Region_Count_16 ~ Number_of_Relative_Events_LT_17 + Number_of_Relative_Events_T_Helper_cells_CD4_cells_19 + Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_21, data=BD_complete)
+
+# Imprimir los resultados del modelo imputado
+print(summary(imputed_model_sample4))
+```
+
+```{r}
+# Realiza tu análisis en cada conjunto de datos imputado
+analyses_sample4 <- with(imputed_data_sample4, imputed_model_sample4)
+
+# Combina los resultados de los análisis
+combined_results_sample4<- pool(analyses_sample4)
+
+combined_results_sample4
+```

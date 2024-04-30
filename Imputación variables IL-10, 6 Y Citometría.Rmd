@@ -1,0 +1,546 @@
+---
+title: "Imputación IL´s"
+author: "Juan Manuel Sánchez Restrepo"
+date: "2024-03-20"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+#librerias
+library(readxl)
+library(mice)
+library(tinytex)
+```
+
+```{r}
+#cargar la base datos
+data <- read_xlsx("C:/Users/UNALMED/Desktop/One Health/Tesis doctora Olga/Bases de datos/LongCOVID_IL.xlsx", sheet = 2)
+data1 <- read_xlsx("C:/Users/UNALMED/Desktop/One Health/Tesis doctora Olga/Bases de datos/5. Resultados Citometría CyC_22032024.xlsx", sheet = 3)
+names(data)
+names(data1)
+```
+
+```{r}
+# Renombrar las variables para eliminar los guiones y los puntos suspensivos
+names(data) <- gsub("-", "_", names(data))
+names(data) <- gsub("\\.\\.\\.", "_", names(data))
+names(data) <- gsub(" ", "_", names(data))
+names(data) <- gsub("\\(", "", names(data))
+names(data) <- gsub("\\)", "", names(data))
+names(data) <- gsub("/", "_", names(data))
+names(data)
+```
+
+
+```{r}
+# Renombrar las variables para eliminar los guiones y los puntos suspensivos
+names(data1) <- gsub("-", "_", names(data1))
+names(data1) <- gsub("\\.\\.\\.", "_", names(data1))
+names(data1) <- gsub(" ", "_", names(data1))
+names(data1) <- gsub("\\(", "", names(data1))
+names(data1) <- gsub("\\)", "", names(data1))
+names(data1) <- gsub("/", "_", names(data1))
+names(data1) <- gsub("\\+", "", names(data1))
+names(data1)
+```
+
+```{r}
+#crear una matriz para incluir nombres de las interleuquinas de las tres muestras
+vari_Il <- c("ARCHITECT_IgG_CONCENTRATION_14","IgG_ANTI_NUCLEOCAPSID_Ratio", "IFN_alpha_18","IFN_gamma_19","IL_1_beta_20", "IL_2_21", "IL_4_22", "IL_6_23", "IL_8_CXCL8_24", "IL_10_25", "IL_12_IL_23p40_26", "IL_13_27", "IL_17A_CTLA_8_28", "IL_18_29","IP_10_CXCL10_30","MCP_1_CCL2_31","MIG_CXCL9_32","MIP_1_alpha_CCL3_33","TNF_alpha_34","Signal_Inhibition_Wuhan_36","Signal_Inhibition_Mu_38","Signal_Inhibition_BA.1_40","Signal_Inhibition_BA.2_42","IFN_alpha_44","IFN_gamma_45","IL_1_beta_46", "IL_2_47", "IL_4_48", "IL_6_49", "IL_8_CXCL8_50","IL_10_51","IL_12_IL_23p40_52","IL_13_53","IL_17A_CTLA_8_54","IL_18_55","IP_10_CXCL10_56","MCP_1_CCL2_57","MIG_CXCL9_58","MIP_1_alpha_CCL3_59","RANTES_CCL5_60","TGF_beta_61","TNF_alpha_62","IFN_alpha_64","IFN_gamma_65","IL_1_beta_66","IL_2_67","IL_4_68","IL_6_69", "IL_8_CXCL8_70", "IL_10_71", "IL_12_IL_23p40_72","IL_13_73", "IL_17A_CTLA_8_74","IL_18_75","IP_10_CXCL10_76","MCP_1_CCL2_77","MIG_CXCL9_78","MIP_1_alpha_CCL3_79","RANTES_CCL5_80","TNF_alpha_81")
+```
+
+
+```{r}
+vari_s1 <- c( "IL_6_23", "IL_10_25" )
+variCi_s1 <- c("Number_of_Relative_Events_T_Helper_cells_CD4_cells_5", "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_7" )
+
+vari_s2 <- c( "IL_6_49", "IL_10_51" )
+variCi_s2 <- c("Number_of_Relative_Events_T_Helper_cells_CD4_cells_12", "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_14")
+
+vari_s3 <- c( "IL_6_69", "IL_10_71" )
+variCi_s3 <- c("Number_of_Relative_Events_T_Helper_cells_CD4_cells_26", "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_28")
+```
+
+
+```{r}
+#Función para convertir las variables de interlequina de las tres muestras a numericas
+convertir_a_numerico <- function(data, variables) {
+  for (col in variables) {
+    data[[col]] <- as.numeric(data[[col]])
+  }
+  return(data)
+}
+```
+
+```{r, include= FALSE}
+#Llamar la función con las variables de Il de la base de datos
+data <- convertir_a_numerico(data, vari_s1)
+data <- convertir_a_numerico(data, vari_s2)
+data <- convertir_a_numerico(data, vari_s3)
+
+#Llamar la función con las variables de Citometría de la base de datos
+data1 <- convertir_a_numerico(data1, variCi_s1)
+data1 <- convertir_a_numerico(data1, variCi_s2)
+data1 <- convertir_a_numerico(data1, variCi_s3)
+```
+
+
+```{r}
+# Crear un subconjunto de los datos que excluye los valores de ID_SAMPLE "GOB-HSPL-0045", "GOB-HSPL-0102" para la imputación de las muestras de las visitas 2 y 3
+data_subset <- data[!data$ID_SAMPLE %in% c("GOB-HSPL-0045", "GOB-HSPL-0102"), ]
+data1_subset <- data1[!data1$ID_SAMPLE %in% c("GOB-HSPL-0045", "GOB-HSPL-0102"), ]
+```
+
+
+
+El paquete mice en R es una biblioteca para la imputación de datos faltantes. MICE (Multivariate Imputation by Chained Equations), “Imputación de Cadena por Ecuaciones Multivariadas". 
+
+1.	La función realiza una imputación simple para cada variable con datos faltantes. Esto significa que reemplaza cada valor faltante con un valor estimado. La estimación se realiza utilizando un modelo predictivo basado en las otras variables.
+
+2.	Luego, realiza un proceso iterativo de imputación. En cada iteración, la función selecciona una variable con datos imputados y la "vacía", es decir, vuelve a poner los valores faltantes en su lugar.
+
+3.	Luego re-imputa los valores faltantes para esa variable, utilizando un modelo predictivo basado en todas las otras variables (que ahora incluyen algunas imputaciones).
+
+4.	Este proceso se repite para cada variable con datos faltantes, y luego se repite para un número de iteraciones especificado. Cada iteración "refina" las imputaciones, haciéndolas más consistentes con los patrones observados en los datos.
+
+5.	Al final del proceso, tienes un conjunto de datos completo, donde los valores faltantes han sido reemplazados por imputaciones.
+
+El método "Predictive Mean Matching" (PMM) es uno de los métodos de imputación que se pueden utilizar con el paquete mice en R.
+
+Su funcionadmiento implica que para cada valor faltante en una variable, PMM ajusta un modelo de regresión utilizando las otras variables como predictores. Este modelo se utiliza para predecir un valor para el dato faltante.
+
+Luego, en lugar de simplemente usar este valor predicho, PMM busca en los datos observados para encontrar un valor que sea similar al valor predicho.
+
+El valor observado que se encuentra es el que se utiliza para imputar el dato faltante. Esto significa que todas las imputaciones son valores que realmente se observaron en los datos, lo que puede ayudar a preservar la distribución de los datos.
+
+Este proceso se repite para cada valor faltante en los datos.
+
+La ventaja de PMM es que, al utilizar valores observados para las imputaciones, puede preservar características importantes de los datos, como la distribución y las relaciones entre variables. Sin embargo, como todos los métodos de imputación, no es perfecto y puede introducir sesgo si los datos faltantes no son aleatorios.
+
+```{r, include=FALSE}
+#Imputar las variables de Il de la muestra 1 con la libreria mice 
+imputed_data_sample1 <- mice(data[vari_s1], m=5, maxit=50, method='pmm', seed=500)
+```
+
+```{r}
+imputed_data1_sample1 <- mice(data1[variCi_s1], m=5, maxit=50, method='pmm', seed=500 )
+```
+
+
+```{r, include=FALSE}
+#Imputar las variables de Il de la muestra 2 con la libreria mice
+imputed_data_sample2 <- mice(data_subset[vari_s2], m=5, maxit=50, method='pmm', seed=500)
+```
+
+```{r}
+imputed_data1_sample2 <- mice(data1_subset[variCi_s2], m=5, maxit=50, method='pmm', seed=500 )
+```
+
+```{r, include=FALSE}
+#Imputar las variables de Il de la muestra 3 con la libreria mice
+imputed_data_sample3 <- mice(data_subset[vari_s3], m=5, maxit=50, method='pmm', seed=500)
+```
+
+```{r}
+imputed_data1_sample3 <- mice(data1_subset[variCi_s3], m=5, maxit=50, method='pmm', seed=500 )
+```
+
+```{r}
+# Completar cada conjunto de datos imputado de interleucinas
+completed_data_sample1 <- complete(imputed_data_sample1, 1)
+completed_data_sample2 <- complete(imputed_data_sample2, 1)
+completed_data_sample3 <- complete(imputed_data_sample3, 1)
+```
+
+```{r}
+# Completar cada conjunto de datos imputado de Citometría
+completed_data1_sample1 <- complete(imputed_data1_sample1, 1)
+completed_data1_sample2 <- complete(imputed_data1_sample2, 1)
+completed_data1_sample3 <- complete(imputed_data1_sample3, 1)
+```
+
+```{r}
+# Combinar los conjuntos de datos completos
+BD_complete <- cbind(completed_data_sample1, completed_data_sample2, completed_data_sample3)
+```
+
+###########################
+###Interleucina visita 1###
+###########################
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 1 sin imputar 
+summary(data[,vari_s1])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 1 imputadas 
+summary(completed_data_sample1[,vari_s1])
+```
+
+
+#########################
+###Citometría visita 1###
+#########################
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 1 sin imputar 
+summary(data1[,variCi_s1])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 1 imputadas 
+summary(completed_data1_sample1[,variCi_s1])
+```
+
+
+##########################
+###Interleucina visita2###
+##########################
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 2 sin imputar 
+summary(data_subset[,vari_s2])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 2 imputada 
+summary(completed_data_sample2[,vari_s2])
+```
+
+#########################
+###Citometría visita 2###
+#########################
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 2 sin imputar 
+summary(data1_subset[,variCi_s2])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 2 imputada 
+summary(completed_data1_sample2[,variCi_s2])
+```
+
+##########################
+###Interleucina visita3###
+##########################
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 3 sin imputar 
+summary(data_subset[,vari_s3])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 3 imputada 
+summary(completed_data_sample3[,vari_s3])
+```
+
+#########################
+###Citometría visita 3###
+#########################
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 3 sin imputar 
+summary(data1_subset[,variCi_s3])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 3 imputada 
+summary(completed_data1_sample3[,variCi_s3])
+```
+
+## Grafico de distribución para las variables de interleucina de la muestra 1 imputadas y sin imputar
+```{r}
+par(mfrow=c(1,2))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in vari_s1) {
+    # Calcular las densidades
+    dens_orig <- density(data[[var]], na.rm=TRUE)
+    dens_imputed <- density(completed_data_sample1[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
+
+## Grafico de distribución para las variables de citometría de la muestra 1 imputadas y sin imputar
+```{r}
+par(mfrow=c(1,2))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in variCi_s1) {
+    # Calcular las densidades
+    dens_orig <- density(data1[[var]], na.rm=TRUE)
+    dens_imputed <- density(completed_data1_sample1[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
+
+
+## Grafico de distribución para las variables de interleucina de la muestra 2 imputadas y sin imputar
+```{r}
+par(mfrow=c(1,2))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in vari_s2) {
+    # Calcular las densidades
+    dens_orig <- density(data_subset[[var]], na.rm=TRUE)
+    dens_imputed <- density(completed_data_sample2[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
+
+## Grafico de distribución para las variables de citometría de la muestra 1 imputadas y sin imputar
+```{r}
+par(mfrow=c(1,2))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in variCi_s2) {
+    # Calcular las densidades
+    dens_orig <- density(data1_subset[[var]], na.rm=TRUE)
+    dens_imputed <- density(completed_data1_sample2[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
+
+
+
+## Grafico de distribución para las variables de interleucina la muestra 3 imputadas y sin imputar
+```{r}
+par(mfrow=c(1,2))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in vari_s3) {
+    # Calcular las densidades
+    dens_orig <- density(data_subset[[var]], na.rm=TRUE)
+    dens_imputed <- density(completed_data_sample3[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
+
+## Grafico de distribución para las variables de citometría de la muestra 3 imputadas y sin imputar
+```{r}
+par(mfrow=c(1,2))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in variCi_s3) {
+    # Calcular las densidades
+    dens_orig <- density(data1_subset[[var]], na.rm=TRUE)
+    dens_imputed <- density(completed_data1_sample3[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
+
+
+```{r}
+ID_SAMPLE = data['ID_SAMPLE']
+
+BD_complete <- cbind(ID_SAMPLE, BD_complete)
+```
+
+```{r}
+library(openxlsx)
+# Escribe BD_complete_IL en un archivo de Excel en un directorio específico
+write.xlsx(BD_complete, "C:/Users/UNALMED/Desktop/One Health/Tesis doctora Olga/Bases de datos/BD_complete_IL_todas.xlsx")
+```
+
+
+
+```{r}
+
+#Análisis de sensibilidad para las interleuquinas de la muestra 1
+# Aplicar un modelo lineal a los datos originales
+# Nota: Esto excluirá automáticamente las filas con valores faltantes
+original_model_sample1 <- lm(IL_1_beta_20 ~ IL_2_21 + IL_4_22 + IL_6_23 + IL_8_CXCL8_24 + IL_10_25 + IL_12_IL_23p40_26 + IL_13_27 + IL_17A_CTLA_8_28 + IL_18_29, data=data)
+
+# Imprimir los resultados del modelo original
+print(summary(original_model_sample1))
+
+# Aplicar un modelo lineal a los datos imputados
+imputed_model_sample1 <- lm(IL_1_beta_20 ~ IL_2_21 + IL_4_22 + IL_6_23 + IL_8_CXCL8_24 + IL_10_25 + IL_12_IL_23p40_26 + IL_13_27 + IL_17A_CTLA_8_28 + IL_18_29, data=BD_complete)
+
+# Imprimir los resultados del modelo imputado
+print(summary(imputed_model_sample1))
+```
+
+```{r}
+# Realiza tu análisis en cada conjunto de datos imputado
+analyses_sample1 <- with(imputed_data, imputed_model_sample1)
+
+# Combina los resultados de los análisis
+combined_results_sample1 <- pool(analyses_sample1)
+
+combined_results_sample1
+```
+
+
+```{r}
+
+#Análisis de sensibilidad para las interleuquinas de la muestra 2
+# Aplicar un modelo lineal a los datos originales
+# Nota: Esto excluirá automáticamente las filas con valores faltantes
+original_model_sample2 <- lm(IL_1_beta_46 ~ IL_2_47 + IL_4_48 + IL_6_49 + IL_8_CXCL8_50 + IL_10_51 + IL_12_IL_23p40_52 +
+IL_13_53 + IL_17A_CTLA_8_54 + IL_18_55, data=data)
+
+# Imprimir los resultados del modelo original
+print(summary(original_model_sample2))
+
+# Aplicar un modelo lineal a los datos imputados
+imputed_model_sample2 <- lm(IL_1_beta_46 ~ IL_2_47 + IL_4_48 + IL_6_49 + IL_8_CXCL8_50 + IL_10_51 + IL_12_IL_23p40_52 +
+IL_13_53 + IL_17A_CTLA_8_54 + IL_18_55, data=BD_complete)
+
+# Imprimir los resultados del modelo imputado
+print(summary(imputed_model_sample2))
+```
+
+```{r}
+# Realiza tu análisis en cada conjunto de datos imputado
+analyses_sample2 <- with(imputed_data, imputed_model_sample2)
+
+# Combina los resultados de los análisis
+combined_results_sample2<- pool(analyses_sample2)
+
+combined_results_sample2
+```
+
+```{r}
+
+#Análisis de sensibilidad para las interleuquinas de la muestra 3
+# Aplicar un modelo lineal a los datos originales
+# Nota: Esto excluirá automáticamente las filas con valores faltantes
+original_model_sample3 <- lm(IL_1_beta_66 ~ IL_2_67 + IL_4_68 + IL_6_69 + IL_8_CXCL8_70 + IL_10_71 + IL_12_IL_23p40_72 + IL_13_73 + IL_17A_CTLA_8_74 + IL_18_75, data=data)
+
+# Imprimir los resultados del modelo original
+print(summary(original_model_sample3))
+
+# Aplicar un modelo lineal a los datos imputados
+imputed_model_sample3 <- lm(IL_1_beta_66 ~ IL_2_67 + IL_4_68 + IL_6_69 + IL_8_CXCL8_70 + IL_10_71 + IL_12_IL_23p40_72 + IL_13_73 + IL_17A_CTLA_8_74 + IL_18_75, data=BD_complete)
+
+# Imprimir los resultados del modelo imputado
+print(summary(imputed_model_sample3))
+```
+
+```{r}
+# Realiza tu análisis en cada conjunto de datos imputado
+analyses_sample3 <- with(imputed_data, imputed_model_sample3)
+
+# Combina los resultados de los análisis
+combined_results_sample3<- pool(analyses_sample3)
+
+combined_results_sample3
+```
+
+
+
+
+
+
+# IMPUTACIÓN IL´S DE LA MUESTRA 4
+
+```{r}
+#Verificqamos la naturaleza de la variable
+str(data$DATE_SAMPLE_4)
+```
+
+```{r}
+#Seleccionamos las variables de la muestra 4
+var_il_sample_4 <- c("ARCHITECT_IgG_CONCENTRATION_85","IgG_ANTI_NUCLEOCAPSID_RATIO","IFN_alpha_89","IFN_gamma_90","IL_1_beta_91","IL_2_92","IL_4_93","IL_6_94","IL_8_CXCL8_95","IL_10_96","IL_12_IL_23p40_97","IL_13_98","IL_17A_CTLA_8_99","IL_18_100","IP_10_CXCL10_101","MCP_1_CCL2_102","MIG_CXCL9_103","MIP_1_alpha_CCL3_104","RANTES_CCL5_105","TGF_beta_106","TNF_alpha_107","Signal_Inhibition_Wuhan_109","Signal_Inhibition_Mu_111","Signal_Inhibition_BA.1_113","Signal_Inhibition_BA.2_115")
+```
+
+```{r, include= FALSE}
+#Llamar la función con las variables de la muestra 4
+data <- convertir_a_numerico(data, var_il_sample_4)
+```
+
+```{r}
+#Seleccionar los pacientes que tuvieron muestra en la visita 4
+data_Sample_4 <- data[complete.cases(data$DATE_SAMPLE_4), ]
+```
+
+
+```{r, include=FALSE}
+#Imputar las variables de Il de la muestra 1 con la libreria mice 
+imputed_data_sample4 <- mice(data_Sample_4[var_il_sample_4], m=5, maxit=50, method='pmm', seed=500)
+```
+
+```{r}
+completed_data_sample4 <- complete(imputed_data_sample4, 1)
+```
+
+```{r}
+summary(data_Sample_4[var_il_sample_4])
+```
+```{r}
+summary(completed_data_sample4[var_il_sample_4])
+```
+
+```{r}
+par(mfrow=c(2,3))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in var_il_sample_4) {
+    # Calcular las densidades
+    dens_orig <- density(data_Sample_4[[var]], na.rm=TRUE)
+    dens_imputed <- density(completed_data_sample4[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
+
+```{r}
+ID_SAMPLE_4 = data_Sample_4['ID_SAMPLE']
+completed_data_sample4 <- cbind(ID_SAMPLE_4, completed_data_sample4)
+```
+
+```{r}
+library(openxlsx)
+# Escribe BD_complete_IL en un archivo de Excel en un directorio específico
+write.xlsx(completed_data_sample4, "C:/Users/UNALMED/Desktop/One Health/Tesis doctora Olga/Bases de datos/IL_sample_4.xlsx")
+```

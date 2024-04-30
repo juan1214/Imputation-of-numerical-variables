@@ -1,0 +1,198 @@
+---
+title: "Imputación IL´s"
+author: "Juan Manuel Sánchez Restrepo"
+date: "2024-03-20"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+#librerias
+library(readxl)
+library(mice)
+library(tinytex)
+```
+
+```{r}
+#cargar la base datos
+data <- read_xlsx("longCOVID_IL.xlsx", sheet = 2)
+names(data)
+```
+
+```{r}
+# Renombrar las variables para eliminar los guiones y los puntos suspensivos
+names(data) <- gsub("-", "_", names(data))
+names(data) <- gsub("\\.\\.\\.", "_", names(data))
+names(data) <- gsub(" ", "_", names(data))
+names(data) <- gsub("\\(", "", names(data))
+names(data) <- gsub("\\)", "", names(data))
+names(data) <- gsub("/", "_", names(data))
+names(data)
+```
+```{r}
+#crear una matriz para incluir nombres de las interleuquinas de las tres muestras
+vari_Il <- c("IL_1_beta_20", "IL_2_21", "IL_4_22", "IL_6_23", "IL_8_CXCL8_24", "IL_10_25", "IL_12_IL_23p40_26", "IL_13_27", "IL_17A_CTLA_8_28", "IL_18_29", "IL_1_beta_46", "IL_2_47", "IL_4_48", "IL_6_49", "IL_8_CXCL8_50" ,"IL_10_51", "IL_12_IL_23p40_52",
+"IL_13_53","IL_17A_CTLA_8_54","IL_18_55","IL_1_beta_66","IL_2_67","IL_4_68","IL_6_69", "IL_8_CXCL8_70", "IL_10_71", "IL_12_IL_23p40_72",
+"IL_13_73", "IL_17A_CTLA_8_74", "IL_18_75")
+```
+
+```{r}
+#Función para convertir las variables de interlequina de las tres muestras a numericas
+convertir_a_numerico <- function(data, variables) {
+  for (col in variables) {
+    data[[col]] <- as.numeric(data[[col]])
+  }
+  return(data)
+}
+```
+
+```{r, include= FALSE}
+#Llamar la función con las variables de Il de la base de datos
+data <- convertir_a_numerico(data, vari_Il)
+```
+
+```{r, include=FALSE}
+#Imputar las variables de Il con la libreria mice
+imputed_data <- mice(data[vari_Il], m=5, maxit=50, method='pmm', seed=500)
+```
+
+```{r}
+# Crear un conjunto de datos completo utilizando la primera imputación
+BD_complete <- complete(imputed_data, 2)
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 1 sin imputar 
+summary(data[,vari_Il[1:10]])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 1 imputadas 
+summary(BD_complete[,vari_Il[1:10]])
+```
+
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 2 sin imputar 
+summary(data[,vari_Il[11:20]])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 2 imputada 
+summary(BD_complete[,vari_Il[11:20]])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 3 sin imputar 
+summary(data[,vari_Il[21:30]])
+```
+
+```{r}
+#visualizar estadisticos descriptivos de las variables Il de la muestra 3 imputada 
+summary(BD_complete[,vari_Il[21:30]])
+```
+
+
+```{r}
+par(mfrow=c(2,3))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in vari_Il) {
+    # Calcular las densidades
+    dens_orig <- density(data[[var]], na.rm=TRUE)
+    dens_imputed <- density(BD_complete[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
+
+
+```{r}
+
+#Análisis de sensibilidad para las interleuquinas de la muestra 1
+# Aplicar un modelo lineal a los datos originales
+# Nota: Esto excluirá automáticamente las filas con valores faltantes
+original_model_sample1 <- lm(IL_1_beta_20 ~ IL_2_21 + IL_4_22 + IL_6_23 + IL_8_CXCL8_24 + IL_10_25 + IL_12_IL_23p40_26 + IL_13_27 + IL_17A_CTLA_8_28 + IL_18_29, data=data)
+
+# Imprimir los resultados del modelo original
+print(summary(original_model_sample1))
+
+# Aplicar un modelo lineal a los datos imputados
+imputed_model_sample1 <- lm(IL_1_beta_20 ~ IL_2_21 + IL_4_22 + IL_6_23 + IL_8_CXCL8_24 + IL_10_25 + IL_12_IL_23p40_26 + IL_13_27 + IL_17A_CTLA_8_28 + IL_18_29, data=BD_complete)
+
+# Imprimir los resultados del modelo imputado
+print(summary(imputed_model_sample1))
+```
+
+```{r}
+# Realiza tu análisis en cada conjunto de datos imputado
+analyses_sample1 <- with(imputed_data, imputed_model_sample1)
+
+# Combina los resultados de los análisis
+combined_results_sample1 <- pool(analyses_sample1)
+
+combined_results_sample1
+```
+
+
+```{r}
+
+#Análisis de sensibilidad para las interleuquinas de la muestra 2
+# Aplicar un modelo lineal a los datos originales
+# Nota: Esto excluirá automáticamente las filas con valores faltantes
+original_model_sample2 <- lm(IL_1_beta_46 ~ IL_2_47 + IL_4_48 + IL_6_49 + IL_8_CXCL8_50 + IL_10_51 + IL_12_IL_23p40_52 +
+IL_13_53 + IL_17A_CTLA_8_54 + IL_18_55, data=data)
+
+# Imprimir los resultados del modelo original
+print(summary(original_model_sample2))
+
+# Aplicar un modelo lineal a los datos imputados
+imputed_model_sample2 <- lm(IL_1_beta_46 ~ IL_2_47 + IL_4_48 + IL_6_49 + IL_8_CXCL8_50 + IL_10_51 + IL_12_IL_23p40_52 +
+IL_13_53 + IL_17A_CTLA_8_54 + IL_18_55, data=BD_complete)
+
+# Imprimir los resultados del modelo imputado
+print(summary(imputed_model_sample2))
+```
+```{r}
+# Realiza tu análisis en cada conjunto de datos imputado
+analyses_sample2 <- with(imputed_data, imputed_model_sample2)
+
+# Combina los resultados de los análisis
+combined_results_sample2<- pool(analyses_sample2)
+
+combined_results_sample2
+```
+
+```{r}
+
+#Análisis de sensibilidad para las interleuquinas de la muestra 3
+# Aplicar un modelo lineal a los datos originales
+# Nota: Esto excluirá automáticamente las filas con valores faltantes
+original_model_sample3 <- lm(IL_1_beta_66 ~ IL_2_67 + IL_4_68 + IL_6_69 + IL_8_CXCL8_70 + IL_10_71 + IL_12_IL_23p40_72 + IL_13_73 + IL_17A_CTLA_8_74 + IL_18_75, data=data)
+
+# Imprimir los resultados del modelo original
+print(summary(original_model_sample3))
+
+# Aplicar un modelo lineal a los datos imputados
+imputed_model_sample3 <- lm(IL_1_beta_66 ~ IL_2_67 + IL_4_68 + IL_6_69 + IL_8_CXCL8_70 + IL_10_71 + IL_12_IL_23p40_72 + IL_13_73 + IL_17A_CTLA_8_74 + IL_18_75, data=BD_complete)
+
+# Imprimir los resultados del modelo imputado
+print(summary(imputed_model_sample3))
+```
+
+```{r}
+# Realiza tu análisis en cada conjunto de datos imputado
+analyses_sample3 <- with(imputed_data, imputed_model_sample3)
+
+# Combina los resultados de los análisis
+combined_results_sample3<- pool(analyses_sample3)
+
+combined_results_sample3
+```

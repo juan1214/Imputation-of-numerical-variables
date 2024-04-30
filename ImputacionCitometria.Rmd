@@ -1,0 +1,354 @@
+---
+title: "Imputación citometría"
+author: "Juan Manuel Sánchez Restrepo"
+date: "2024-04-01"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, echo = FALSE, results='hide', message=FALSE, warning=FALSE}
+#librerias
+library(readxl)
+library(mice)
+library(tinytex)
+library(xtable)
+library(dplyr)
+```
+
+```{r}
+#cargar la base datos
+data1 <- invisible(read_xlsx("C:/Users/UNALMED/Desktop/One Health/Tesis doctora Olga/Bases de datos/5. Resultados Citometría CyC_22032024.xlsx", sheet = 3))
+#names(data1)
+```
+
+```{r}
+# Renombrar las variables para eliminar los guiones y los puntos suspensivos
+names(data1) <- gsub("-", "_", names(data1))
+names(data1) <- gsub("\\.\\.\\.", "_", names(data1))
+names(data1) <- gsub(" ", "_", names(data1))
+names(data1) <- gsub("\\(", "", names(data1))
+names(data1) <- gsub("\\)", "", names(data1))
+names(data1) <- gsub("/", "_", names(data1))
+names(data1) <- gsub("\\+", "", names(data1))
+names(data1)
+```
+
+```{r,results='hide', message=FALSE, warning=FALSE}
+# Crear un diccionario de variables y excluir la variable "ID_SAMPLE"
+variables_num <- setdiff(names(data1), "ID_SAMPLE")
+
+# Convertir las variables dentro del diccionario a numericas
+data1[variables_num] <- lapply(data1[variables_num], as.numeric)
+```
+
+
+```{r}
+#Crear una nueva base de datos con la variable "ID_SAMPLE" y las variables de citometria a imputar
+data2 <- data1[,c("ID_SAMPLE", "Bead_Region_Count_2", "Number_of_Relative_Events_LT_3",
+                  "Number_of_Relative_Events_T_Helper_cells_CD4_cells_5", 
+                  "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_7", 
+                  "Bead_Region_Count_9",  "Number_of_Relative_Events_LT_10", 
+                  "Number_of_Relative_Events_T_Helper_cells_CD4_cells_12", 
+                  "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_14", 
+                  "Bead_Region_Count_16", "Number_of_Relative_Events_LT_17", 
+                  "Number_of_Relative_Events_T_Helper_cells_CD4_cells_19",  
+                  "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_21", 
+                  "Bead_Region_Count_23", "Number_of_Relative_Events_LT_24", 
+                  "Number_of_Relative_Events_T_Helper_cells_CD4_cells_26", 
+                  "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_28")]
+```
+
+```{r, echo = F}
+var_cit <- c("Bead_Region_Count_2", "Number_of_Relative_Events_LT_3", "Number_of_Relative_Events_T_Helper_cells_CD4_cells_5", "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_7", "Bead_Region_Count_9",  "Number_of_Relative_Events_LT_10", "Number_of_Relative_Events_T_Helper_cells_CD4_cells_12", "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_14", "Bead_Region_Count_16", "Number_of_Relative_Events_LT_17", "Number_of_Relative_Events_T_Helper_cells_CD4_cells_19",  "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_21", "Bead_Region_Count_23", "Number_of_Relative_Events_LT_24", "Number_of_Relative_Events_T_Helper_cells_CD4_cells_26", "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells_28")
+```
+
+
+
+```{r}
+#Verificar que las variables se hayan convertido a numericas
+str(data2)
+```
+
+# Librería 'mice' para imputación de datos faltantes
+
+El paquete mice en R es una biblioteca para la imputación de datos faltantes. MICE (Multivariate Imputation by Chained Equations), “Imputación de Cadena por Ecuaciones Multivariadas". 
+
+1.	La función realiza una imputación simple para cada variable con datos faltantes. Esto significa que reemplaza cada valor faltante con un valor estimado. La estimación se realiza utilizando un modelo predictivo basado en las otras variables.
+
+2.	Luego, realiza un proceso iterativo de imputación. En cada iteración, la función selecciona una variable con datos imputados y la "vacía", es decir, vuelve a poner los valores faltantes en su lugar.
+
+3.	Luego re-imputa los valores faltantes para esa variable, utilizando un modelo predictivo basado en todas las otras variables (que ahora incluyen algunas imputaciones).
+
+4.	Este proceso se repite para cada variable con datos faltantes, y luego se repite para un número de iteraciones especificado. Cada iteración "refina" las imputaciones, haciéndolas más consistentes con los patrones observados en los datos.
+
+5.	Al final del proceso, tienes un conjunto de datos completo, donde los valores faltantes han sido reemplazados por imputaciones.
+
+El método "Predictive Mean Matching" (PMM) es uno de los métodos de imputación que se pueden utilizar con el paquete mice en R.
+
+Su funcionadmiento implica que para cada valor faltante en una variable, PMM ajusta un modelo de regresión utilizando las otras variables como predictores. Este modelo se utiliza para predecir un valor para el dato faltante.
+
+Luego, en lugar de simplemente usar este valor predicho, PMM busca en los datos observados para encontrar un valor que sea similar al valor predicho.
+
+El valor observado que se encuentra es el que se utiliza para imputar el dato faltante. Esto significa que todas las imputaciones son valores que realmente se observaron en los datos, lo que puede ayudar a preservar la distribución de los datos.
+
+Este proceso se repite para cada valor faltante en los datos.
+
+La ventaja de PMM es que, al utilizar valores observados para las imputaciones, puede preservar características importantes de los datos, como la distribución y las relaciones entre variables. Sin embargo, como todos los métodos de imputación, no es perfecto y puede introducir sesgo si los datos faltantes no son aleatorios.
+
+
+# Imputación de citometría de la muestra 1
+```{r, results='hide'}
+#Imputar las variables de Citometría de la muestra 1 con la libreria mice 
+imputed_data_sample1 <- mice(data2[2:5], m=5, maxit=50, method='pmm', seed=500)
+```
+
+# Imputación de citometría de la muestra 2
+```{r, results='hide'}
+#Imputar las variables de Citometría de la muestra 2 con la libreria mice
+imputed_data_sample2 <- mice(data2[6:9], m=5, maxit=50, method='pmm', seed=500)
+```
+
+# Imputación de citometría de la muestra 3
+```{r, results='hide'}
+#Imputar las variables de Citometría de la muestra 3 con la libreria mice
+imputed_data_sample3 <- mice(data2[10:13], m=5, maxit=50, method='pmm', seed=500)
+```
+
+# Imputación de citometría de la muestra 4
+```{r, results='hide'}
+#Imputar las variables de Citometría de la muestra 3 con la libreria mice
+imputed_data_sample4 <- mice(data2[14:17], m=5, maxit=50, method='pmm', seed=500)
+```
+
+
+# Selección de la muestra
+```{r}
+# Completar cada conjunto de datos imputado
+completed_data_sample1 <- complete(imputed_data_sample1, 1)
+completed_data_sample2 <- complete(imputed_data_sample2, 1)
+completed_data_sample3 <- complete(imputed_data_sample3, 1)
+completed_data_sample4 <- complete(imputed_data_sample4, 1)
+```
+
+# Combinar en una nueva base de datos las variables imputadas y la variable 'ID_SAMPLE'
+```{r}
+
+ID_SAMPLE = data2['ID_SAMPLE']
+# Combinar los conjuntos de datos completos
+BD_complete <- cbind(ID_SAMPLE, completed_data_sample1, completed_data_sample2,
+                     completed_data_sample3, completed_data_sample4)
+```
+
+
+# Estadísticos descriptivos imputados y sin imputar para la muestra 1
+
+## Sin imputar
+```{r}
+#visualizar estadisticos descriptivos de las variables de citometria de la muestra 1 sin imputar 
+summary(data2[2:5])
+```
+
+## Imputados
+```{r}
+#visualizar estadisticos descriptivos de las variables de citometria de la muestra 1 imputadas 
+summary(BD_complete[2:5])
+```
+
+# Estadísticos descriptivos imputados y sin imputar para la muestra 2
+## Sin imputar
+```{r}
+#visualizar estadisticos descriptivos de las variables de citometria de la muestra 2 sin imputar 
+summary(data2[6:9])
+```
+
+## Imputados
+```{r}
+#visualizar estadisticos descriptivos de las variables de citometria de la muestra 2 imputada 
+summary(BD_complete[6:9])
+```
+
+# Estadísticos descriptivos imputados y sin imputar para la muestra 3
+## Sin imputar
+```{r}
+#visualizar estadisticos descriptivos de las variablesde citometria  de la muestra 3 sin imputar 
+summary(data2[10:13])
+```
+## Imputados
+```{r, echo = F}
+#visualizar estadisticos descriptivos de las variables de citometria  de la muestra 3 imputada 
+summary(BD_complete[10:13])
+```
+
+# Grafico de comparación de densidades de las variables imputadas
+```{r}
+par(mfrow=c(2,2))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in var_cit) {
+    # Calcular las densidades
+    dens_orig <- density(data2[[var]], na.rm=TRUE)
+    dens_imputed <- density(BD_complete[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
+
+# Imputación aleatoria
+```{r}
+# Load the necessary library
+library(mice)
+
+# Define the random imputation function
+rand.imput <- function(x){
+  missing <- is.na(x) # Boolean vector
+  n.missing <- sum(missing) # Number of NAs
+  x.obs <- x[!missing] # Non-NA data
+  imputed <- x
+  imputed[missing] <- sample(x.obs, n.missing, replace = TRUE) # Replace NAs with random sample from known data
+  return(imputed)
+}
+
+
+```
+
+# Imputación de citometría de la muestra 1
+```{r}
+# Apply the rand.imput function to each of the columns 2 to 5 of data2
+imputed_data_sample1_ale <- lapply(data2[2:5], rand.imput)
+
+# Convert the list back to a dataframe
+imputed_dataimputed_data_sample1_ale <- as.data.frame(imputed_data_sample1_ale)
+```
+
+# Imputación de citometría de la muestra 2
+```{r}
+# Apply the rand.imput function to each of the columns 6 to 9 of data2
+imputed_data_sample2_ale <- lapply(data2[6:9], rand.imput)
+
+# Convert the list back to a dataframe
+imputed_dataimputed_data_sample2_ale <- as.data.frame(imputed_data_sample2_ale)
+```
+
+# Imputación de citometría de la muestra 3
+```{r}
+# Apply the rand.imput function to each of the columns 10 to 13 of data2
+imputed_data_sample3_ale <- lapply(data2[10:13], rand.imput)
+
+# Convert the list back to a dataframe
+imputed_dataimputed_data_sample3_ale <- as.data.frame(imputed_data_sample3_ale)
+```
+
+# Imputación de citometría de la muestra 4
+```{r}
+# Apply the rand.imput function to each of the columns 14 to 17 of data2
+imputed_data_sample4_ale <- lapply(data2[14:17], rand.imput)
+
+# Convert the list back to a dataframe
+imputed_dataimputed_data_sample4_ale <- as.data.frame(imputed_data_sample4_ale)
+```
+
+
+# Combinar en una nueva base de datos las variables imputadas y la variable 'ID_SAMPLE'
+```{r}
+ID_SAMPLE = data2['ID_SAMPLE']
+# Combinar los conjuntos de datos completos
+BD_complete_ale <- cbind(ID_SAMPLE, imputed_dataimputed_data_sample1_ale, imputed_dataimputed_data_sample2_ale,
+                     imputed_dataimputed_data_sample3_ale, imputed_dataimputed_data_sample4_ale)
+```
+
+
+# Grafico de comparación de densidades de las variables imputadas
+```{r}
+par(mfrow=c(2,2))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in var_cit) {
+    # Calcular las densidades
+    dens_orig <- density(data2[[var]], na.rm=TRUE)
+    dens_imputed <- density(BD_complete_ale[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
+# IMPUTACIÓN CITOMETRIA DE LA MUESTRA 4
+
+```{r}
+#cargar la base datos
+data_S4 <- invisible(read_xlsx("C:/Users/UNALMED/Desktop/One Health/Tesis doctora Olga/Bases de datos/CITOMETRÍA SAMPLE 4.xlsx"))
+
+```
+
+```{r}
+# Renombrar las variables para eliminar los guiones y los puntos suspensivos
+names(data_S4) <- gsub("-", "_", names(data_S4))
+names(data_S4) <- gsub("\\.\\.\\.", "_", names(data_S4))
+names(data_S4) <- gsub(" ", "_", names(data_S4))
+names(data_S4) <- gsub("\\(", "", names(data_S4))
+names(data_S4) <- gsub("\\)", "", names(data_S4))
+names(data_S4) <- gsub("/", "_", names(data_S4))
+names(data_S4) <- gsub("\\+", "", names(data_S4))
+names(data_S4)
+```
+```{r,results='hide', message=FALSE, warning=FALSE}
+# Obtiene los nombres de las columnas que no son "ID_SAMPLE" ni "DATE_SAMPLE_4"
+var_num_s4 <- setdiff(names(data_S4), c("ID_SAMPLE", "DATE_SAMPLE_4"))
+
+# Convierte a numéricas las columnas seleccionadas
+for(columna in var_num_s4) {
+  data_S4[[columna]] <- as.numeric(as.character(data_S4[[columna]]))
+}
+```
+
+```{r}
+var_s4 <- c("Bead_Region_Count" ,"Number_of_Relative_Events_LT", "Number_of_Relative_Events_T_Helper_cells_CD4_cells", "Number_of_Relative_Events_T_Cytotoxic_Cells_CD8_cells" )
+```
+
+
+```{r, results='hide'}
+#Imputar las variables de Citometría de la muestra 1 con la libreria mice 
+imputed_data_sample4 <- mice(data_S4[var_s4], m=5, maxit=50, method='pmm', seed=500)
+```
+
+```{r}
+completed_data_sample4 <- complete(imputed_data_sample4, 1)
+```
+
+```{r}
+summary(data_S4[var_s4])
+```
+
+```{r}
+summary(completed_data_sample4[var_s4])
+```
+
+```{r}
+par(mfrow=c(2,2))  # Organizar los gráficos en una matriz de 10 filas y 3 columnas
+
+for (var in var_s4) {
+    # Calcular las densidades
+    dens_orig <- density(data_S4[[var]], na.rm=TRUE)
+    dens_imputed <- density(completed_data_sample4[[var]])
+
+    # Dibujar el gráfico de densidad de los datos originales en rojo
+    plot(dens_orig, main=var, xlab="", ylab="Density", ylim=c(0, max(dens_orig$y, dens_imputed$y)), xlim=c(min(dens_orig$x, dens_imputed$x), max(dens_orig$x, dens_imputed$x)), col="red")
+    
+    # Añadir el gráfico de densidad de los datos imputados en azul
+    lines(dens_imputed, lty=2, col="blue")
+    
+    # Añadir una leyenda
+    legend("topright", legend=c("Original", "Imputed"), lty=c(1,2), col=c("red", "blue"), cex=0.8)
+}
+```
